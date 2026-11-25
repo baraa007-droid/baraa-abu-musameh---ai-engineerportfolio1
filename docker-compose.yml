@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: baraa-portfolio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see DEPLOYMENT.md)}
+      POSTGRES_DB: ${POSTGRES_DB:-portfolio_db}
+    ports:
+      # BIND_ADDRESS=127.0.0.1 keeps this port off the LAN (see DEPLOYMENT.md). Default unchanged.
+      - "${BIND_ADDRESS:-0.0.0.0}:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: baraa-portfolio-redis
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (see DEPLOYMENT.md)}
+    ports:
+      # BIND_ADDRESS=127.0.0.1 keeps this port off the LAN (see DEPLOYMENT.md). Default unchanged.
+      - "${BIND_ADDRESS:-0.0.0.0}:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: baraa-portfolio-app-a
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see DEPLOYMENT.md)}@postgres:5432/${POSTGRES_DB:-portfolio_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (see DEPLOYMENT.md)}@redis:6379
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (see DEPLOYMENT.md)}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      PG_SYNC_MODE: ${PG_SYNC_MODE:-load}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-}
+      NOTIFICATION_EMAIL_TO: ${NOTIFICATION_EMAIL_TO:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+    ports:
+      # BIND_ADDRESS=127.0.0.1 keeps this port off the LAN (see DEPLOYMENT.md). Default unchanged.
+      - "${BIND_ADDRESS:-0.0.0.0}:3001:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/ready', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  app-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: baraa-portfolio-app-b
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see DEPLOYMENT.md)}@postgres:5432/${POSTGRES_DB:-portfolio_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (see DEPLOYMENT.md)}@redis:6379
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (see DEPLOYMENT.md)}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      PG_SYNC_MODE: ${PG_SYNC_MODE:-load}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-}
+      NOTIFICATION_EMAIL_TO: ${NOTIFICATION_EMAIL_TO:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+    ports:
+      # BIND_ADDRESS=127.0.0.1 keeps this port off the LAN (see DEPLOYMENT.md). Default unchanged.
+      - "${BIND_ADDRESS:-0.0.0.0}:3002:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/ready', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:

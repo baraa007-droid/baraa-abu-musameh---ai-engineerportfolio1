@@ -1,0 +1,22 @@
+# Opt-in persistent storage for each app instance's JSON database (/app/.data).
+#
+# WITHOUT this file, db.json lives in each container's writable layer and is LOST when the
+# container is recreated (docker compose up --build / down / image update).
+#
+# DO NOT enable it on an existing deployment before migrating the current data, otherwise the
+# empty volume hides the container's db.json. Follow "Migrating to persistent volumes" in
+# DEPLOYMENT.md first (copy db.json out of each running container, then into the new volume).
+#
+# Usage (after migration):
+#   docker compose -f docker-compose.yml -f docker-compose.volumes.yml up -d
+services:
+  app-a:
+    volumes:
+      - app_a_data:/app/.data
+  app-b:
+    volumes:
+      - app_b_data:/app/.data
+
+volumes:
+  app_a_data:
+  app_b_data:

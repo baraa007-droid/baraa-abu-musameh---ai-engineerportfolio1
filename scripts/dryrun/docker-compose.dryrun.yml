@@ -1,0 +1,83 @@
+# Deployment dry run — completely separate from the live stack:
+#  * its own compose project name, no container_name (no clash with baraa-portfolio-*)
+#  * its own volumes, test passwords from a throwaway env file
+#  * PostgreSQL/Redis are NOT published to the host; apps bind to 127.0.0.1 only
+# Driven by scripts/dryrun/run-dryrun.sh, which removes everything afterwards.
+name: portfolio-dryrun
+
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: portfolio-dryrun-app:latest
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: "no"
+
+x-app-env: &app-env
+  NODE_ENV: production
+  PORT: 3000
+  HOST: 0.0.0.0
+  DATABASE_URL: postgresql://postgres:${DRYRUN_PG_PASSWORD:?}@postgres:5432/portfolio_db
+  REDIS_URL: redis://:${DRYRUN_REDIS_PASSWORD:?}@redis:6379
+  ADMIN_PASSWORD: ${DRYRUN_ADMIN_PASSWORD:?}
+  ADMIN_SESSION_SECRET: ${DRYRUN_SESSION_SECRET:?}
+  CORS_ORIGIN: http://127.0.0.1:43001,http://127.0.0.1:43002
+  EMAIL_PROVIDER: none
+  NOTIFICATIONS_ENABLED: "false"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DRYRUN_PG_PASSWORD:?}
+      POSTGRES_DB: portfolio_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portfolio_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${DRYRUN_REDIS_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app-a:
+    <<: *app
+    environment:
+      <<: *app-env
+      PG_SYNC_MODE: ${PG_SYNC_MODE_A:-load}
+    ports:
+      - "127.0.0.1:43001:3000"
+    volumes:
+      - app_a_data:/app/.data
+
+  app-b:
+    <<: *app
+    environment:
+      <<: *app-env
+      PG_SYNC_MODE: ${PG_SYNC_MODE_B:-load}
+      TRUST_PROXY: ${DRYRUN_TRUST_PROXY_B:-}
+      SESSION_COOKIE_SECURE: ${DRYRUN_COOKIE_SECURE_B:-}
+    ports:
+      - "127.0.0.1:43002:3000"
+    volumes:
+      - app_b_data:/app/.data
+
+volumes:
+  pgdata:
+  app_a_data:
+  app_b_data:

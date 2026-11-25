@@ -1,0 +1,35 @@
+# Security Status
+
+_Facts as of 2026-11-05, verified by `npm test` (221, incl. the 60-check cookie/CSRF suite `scripts/auth_csrf_suite.ts`), `npm run test:unit` (40), `npm run test:e2e` (172), the Docker dry run (`scripts/dryrun/run-dryrun.sh`) and code review. Secrets are never printed in this file._
+
+## Controls in place
+| Control | Status |
+|---|---|
+| Hardcoded secrets | Removed from code and scripts; rescans of tracked text files and `dist/` find no full or partial current secret. `.env*` excluded from the Docker context; `.gitignore` covers `.env*` and `.data/`. |
+| Admin authentication | Password compared in constant time (SHA-256 digests); login limited to 20 attempts/min/IP (test S28). |
+| Session transport (browser) | **`HttpOnly`, `SameSite=Strict`, `Path=/api` cookie**, 7-day `Max-Age`. The browser login response contains **no session token**; nothing is kept in `localStorage` (old `baraa_admin_token` entries are deleted). `Secure` is set for HTTPS requests, and always with `SESSION_COOKIE_SECURE=true`; production logs a warning while it is unset. |
+| Session transport (scripts) | `{"client":"bearer"}` at login returns a token for `Authorization: Bearer`. Not CSRF-prone: browsers never attach that header by themselves. |
+| CSRF | **Synchronizer token per session**: 256-bit random value stored in the server-side session (Redis or memory), returned only in the JSON of `POST /api/auth/login` and `GET /api/auth/check` (no CORS grant for foreign origins, so other sites cannot read it), sent by the UI as `X-CSRF-Token`, compared in constant time. Missing/wrong/other-session token → **403 `CSRF_INVALID`** (the UI refreshes once, otherwise shows the error and stays signed in). Required for every cookie-authenticated `POST/PUT/DELETE/PATCH`, including `logout` and `logout-all`. The previous static `X-Requested-With` value is no longer accepted. Defence in depth: `SameSite=Strict` and the CORS allow-list. |
+| Sessions | Server-side random tokens (Redis or memory); 24 h sliding, **7-day absolute** lifetime; bound to an scrypt fingerprint of `ADMIN_PASSWORD`+`ADMIN_SESSION_SECRET` → rotating either rejects and deletes every existing session on first use (verified in-process and, with sessions persisted in Redis across a restart, in the dry run); legacy sessions rejected; **session rotation on login** (the session the browser presented is revoked); `POST /api/auth/logout-all` + **All Devices** button; UI signs out on any 401. |
+| Authorization | Every write and every private read uses `requireAdmin`. A test enumerates every route in `server.ts`: all 36 admin write routes reject anonymous, forged-Bearer, cookie-without-token, wrong-token and old-header requests; all 4 admin read routes reject anonymous requests; only the 8 intended public write routes (login, logout, contact, lead, events, 3 AI endpoints) lack `requireAdmin` — a new unprotected route fails the suite. Rejected probes change no data (20 GET endpoints compared). |
+| CORS | Only `CORS_ORIGIN` origins get CORS headers (with credentials and `X-CSRF-Token`); foreign-origin preflights → 403; `*` refused in production. |
+| Reverse proxy | `TRUST_PROXY` now parses a hop count as a number (previously `"1"` reached Express as the IP `0.0.0.1`, so the proxy was silently untrusted: wrong client IPs for rate limits, no HSTS, no `Secure` cookie). Unit test + dry run (`TRUST_PROXY=1` + `X-Forwarded-Proto: https` → `Secure` cookie and HSTS; without it a forged header is ignored). `docker-compose.yml` now passes `TRUST_PROXY` and `SESSION_COOKIE_SECURE`. |
+| XSS | React escaping; Markdown renderer neutralises `javascript:` links and raw HTML (unit test); maintenance page escapes admin text; all admin-entered URLs validated. An XSS can no longer read the session token (HttpOnly) or a stored CSRF token (memory only); production CSP limits script sources. |
+| CSP / headers | Production: CSP with hash-pinned inline script, `frame-ancestors 'none'`, `object-src 'none'`; all modes: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP; HSTS in production when the request is HTTPS; `X-Powered-By` removed. |
+| Input validation | Contact/lead forms (dynamic schema, honeypot), settings whitelist (incl. `ai_model` format), lead/message enums, events (type enum, path, 2 KB metadata), AI text and history caps, public body limit 100 kB, admin 2 MB, malformed JSON → 400, oversize → 413. |
+| Rate limits | login 20/min, AI 15/min, public forms 5/10 min, events 120/min (per IP; Redis-backed when configured; memory map swept every minute). There is **no** global limit on other routes: earlier documents listed a "general 60/min" limiter, but it had not been applied to any route since Phase 1 (it was replaced by the stricter form limiter); the unused declaration was removed on 2026-11-05. Public reads are unlimited; a request limit at the HTTPS reverse proxy is the recommended place for one. |
+| Email relay | Visitor confirmation off by default; when on: fixed wording, no visitor text echoed, 1 per address per 24 h. |
+| Prompt injection | Visitor text fenced as data; contact data not sent to models; intent-based security/unknown-fact gates; output redaction of keys/secrets. |
+| Information leakage | Generic 500s (details only in the server log with request id); public lead/message responses return only `{id, status, created_at}`; emails masked in logs. |
+| Data integrity | Corrupt `db.json` → quarantine copy + refuse to start; atomic writes; snapshot before PostgreSQL overwrites JSON; collision-safe ids; unique slugs. |
+| Containers | Image runs as uid 1000, no `.env` inside; compose requires DB/Redis/admin passwords; dry-run stack publishes no DB/Redis ports. |
+| Dependencies | `npm audit`: **0 high, 0 critical, 8 moderate** — all in ESLint/typescript-eslint dev tooling (minimatch ReDoS), not in the production tree (`npm audit --omit=dev`: **0 vulnerabilities**). npm's only offered fix is a downgrade to older majors, so not applied. |
+
+## Open risks (need the owner — see OWNER_ACTIONS_REQUIRED.md)
+1. **`ADMIN_PASSWORD`, `POSTGRES_PASSWORD` and `REDIS_PASSWORD` of the live stack are compromised** (pushed git history `docker-compose.yml`; the admin password also in container env, `.env` copies, earlier transcripts) until rotated. With Redis reachable on the LAN, the running August code can be taken over by writing a session key. **Critical.** Plan: PRODUCTION_RUNBOOK.md.
+2. `ADMIN_SESSION_SECRET` partially exposed during the audit — rotate.
+3. Ports 3001/3002/5432/6379 reachable from the LAN (Docker publishes on `0.0.0.0`). **High.**
+4. The live site is plain HTTP: the session cookie cannot carry `Secure` until HTTPS + `SESSION_COOKIE_SECURE=true`.
+5. `.env` / `.data` ACLs grant Modify to broad groups and unknown SIDs.
+6. PostgreSQL TLS defaults to `no-verify` for remote hosts (set `PG_SSL_MODE=verify-full`).
+7. The live containers still run the **old code** (localStorage token, no CSRF, no fingerprint). None of the fixes protect the running site until it is redeployed.
