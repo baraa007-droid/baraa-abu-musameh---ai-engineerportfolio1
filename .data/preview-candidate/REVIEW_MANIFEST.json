@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-11-17T21:08:10.995Z",
+  "sourceSha256": "562d95a43cc345271c1c02828544141e6e3c84485d379a355159dff024cd5600",
+  "source": ".data/db.json",
+  "candidate": ".data/preview-candidate/db.json",
+  "retainedProjectIds": [
+    "proj-real-ai-portfolio"
+  ],
+  "retainedServiceIds": [
+    "srv-1",
+    "srv-2",
+    "srv-3",
+    "srv-4",
+    "srv-5",
+    "srv-6"
+  ],
+  "excludedProjectCount": 27,
+  "excludedServiceCount": 27,
+  "reviewGroups": {
+    "enterpriseRagServices": [
+      "srv-1788176909463",
+      "srv-1789326531667",
+      "srv-1789326954788",
+      "srv-1789327529567",
+      "srv-1789327887257",
+      "srv-1790492504215",
+      "srv-1790494057489",
+      "srv-1790497889531",
+      "srv-1790498772854",
+      "srv-1790510561767",
+      "srv-1790511591610",
+      "srv-1790512666603",
+      "srv-1790536952495",
+      "srv-1790537621157"
+    ],
+    "placeholderServices": [
+      "srv-1787560641424"
+    ],
+    "knowledgeDocuments": [
+      "know-1",
+      "know-2",
+      "know-3"
+    ]
+  },
+  "candidateKnowledgeChunks": 0,
+  "note": "Candidate is inactive. Fictional project cards and related testimonials are excluded; knowledge and chunks require explicit review and later approved reindexing.",
+  "candidateProjectCount": 1
+}

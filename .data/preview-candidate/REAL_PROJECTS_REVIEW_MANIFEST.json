@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-11-18T10:37:06.662Z",
+  "source_database_unchanged": true,
+  "source_sha256": "562d95a43cc345271c1c02828544141e6e3c84485d379a355159dff024cd5600",
+  "candidate_project_count": 1,
+  "added_projects": [
+    {
+      "id": "proj-real-ai-portfolio",
+      "slug": "ai-engineer-portfolio-platform",
+      "status": "VERIFIED IMPLEMENTED",
+      "evidence": [
+        "README.md",
+        "PROJECT_COMPLETION_STATUS.md",
+        "FINAL_VERIFIED_PROJECT_STATUS.md",
+        "src/",
+        "server/",
+        "tests/"
+      ]
+    }
+  ],
+  "not_added_due_to_insufficient_evidence": [
+    "IUG Moodle Telegram Notifier",
+    "Al-Mohandex Academy",
+    "University Library App — Flutter",
+    "Al-Mohandex Company Website / CMS",
+    "Micro Maestro"
+  ],
+  "excluded_fictional_ids": [
+    "proj-1",
+    "proj-2",
+    "proj-3",
+    "proj-4",
+    "proj-5"
+  ],
+  "knowledge_reindexed": false,
+  "embeddings_generated": false,
+  "candidate_activated": false
+}
